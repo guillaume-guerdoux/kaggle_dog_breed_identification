@@ -5,7 +5,7 @@ import os
 
 
 def random_crop(img):
-    height, width = img.shape
+    height, width, depth = img.shape
     try:
         top_crop = randint(35, int(height / 8))
         bottom_crop = height - randint(35, int(height / 8))
