@@ -56,3 +56,16 @@ def read_random_image(image_path, resize_size, train):
             image_path + "/" + img_name + ".jpg")
     img = cv2.resize(img, (resize_size, resize_size))
     return img, img_name
+
+
+def import_labels():
+    """ This function import labels from csv / Create a list of unique
+    labels and a dict with image_name and its label
+    Output : dict('image_name': 'label')
+    """
+
+    dict_labels = custom_df.set_index('id').to_dict()['breed']
+    unique_labels = sorted(list(set(dict_labels.values())))
+    for index, label in dict_labels.items():
+        dict_labels[index] = unique_labels.index(label)
+    return dict_labels, unique_labels
