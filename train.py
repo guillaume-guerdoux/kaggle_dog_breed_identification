@@ -34,7 +34,7 @@ epochs = 50
 def read_random_image(image_path, resize_size, train):
     if train:
         random_sample = df_train.sample(n=1)
-        img_name = random_sample['Image'].iloc[0]
+        img_name = random_sample['id'].iloc[0]
         img = cv2.imread(
             image_path + "/" + img_name + ".jpg")
         crop_chance = random.random()
@@ -51,7 +51,7 @@ def read_random_image(image_path, resize_size, train):
             img = vertical_flip(img)
     else:
         random_sample = df_test.sample(n=1)
-        img_name = random_sample['Image'].iloc[0]
+        img_name = random_sample['id'].iloc[0]
         img = cv2.imread(
             image_path + "/" + img_name + ".jpg")
     img = cv2.resize(img, (resize_size, resize_size))
@@ -64,8 +64,52 @@ def import_labels():
     Output : dict('image_name': 'label')
     """
 
-    dict_labels = custom_df.set_index('id').to_dict()['breed']
+    dict_labels = df.set_index('id').to_dict()['breed']
     unique_labels = sorted(list(set(dict_labels.values())))
     for index, label in dict_labels.items():
         dict_labels[index] = unique_labels.index(label)
     return dict_labels, unique_labels
+
+
+def data_generator(batch_size, dict_labels, unique_labels, rezise_size, train):
+    while True:
+        x_train = []
+        y_train = []
+        for i in range(batch_size):
+            img, img_name = read_random_image(
+                train_data_dir, rezise_size, train)
+            x_train.append(img)
+            y_train.append(dict_labels[img_name])
+        y_train = np_utils.to_categorical(y_train, len(unique_labels))
+        x_train = np.array(x_train, dtype="float") / 255.0
+        x_train = x_train.reshape(batch_size, rezise_size, rezise_size, 3)
+        yield x_train, y_train
+
+
+if __name__ == "__main__":
+    dict_labels, unique_labels = import_labels()
+    resize_size = 224
+    input_tensor = Input(shape=(resize_size, resize_size, 3))
+    vgg_model = VGG16(input_tensor=input_tensor, weights="imagenet", include_top=False)
+    # base_model.layers.pop()
+
+    # add a global spatial average pooling layer
+    x = vgg_model.output
+    x = Flatten()(x)
+    # let's add a fully-connected layer
+    x = Dense(512, activation='relu')(x)
+    # and a logistic layer -- let's say we have 200 classes
+    predictions = Dense(len(unique_labels), activation='softmax')(x)
+
+    # this is the model we will train
+    model = Model(inputs=vgg_model.input, outputs=predictions)
+    for layer in model.layers[:19]:
+        layer.trainable = False
+    model.summary()
+    model.compile(optimizer='adam', loss='categorical_crossentropy',
+                  metrics=['accuracy'])
+    model.fit_generator(data_generator(batch_size, dict_labels, unique_labels, resize_size, True),
+                        samples_per_epoch=250, nb_epoch=epochs,
+                        validation_data=data_generator(
+                            batch_size, dict_labels, unique_labels, resize_size, False),
+                        validation_steps=60)
