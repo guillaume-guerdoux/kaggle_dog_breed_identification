@@ -7,8 +7,9 @@ import random
 from keras.utils import np_utils
 from keras.models import Model
 from keras.layers import Dense, GlobalAveragePooling2D
-from keras.optimizers import Adam
+from keras.optimizers import Adam, SGD
 from keras.applications.vgg16 import VGG16
+from keras.applications.inception_v3 import InceptionV3
 from keras.layers import Input
 from keras.utils import plot_model
 from keras.layers.core import Flatten
@@ -28,7 +29,7 @@ df = pd.read_csv(train_labels_path)
 df_train, df_test = train_test_split(df, test_size=0.1)
 
 batch_size = 16
-epochs = 50
+epochs = 100
 
 
 def read_random_image(image_path, resize_size, train):
@@ -71,42 +72,46 @@ def import_labels():
     return dict_labels, unique_labels
 
 
-def data_generator(batch_size, dict_labels, unique_labels, rezise_size, train):
+def data_generator(batch_size, dict_labels, unique_labels, resize_size, train):
     while True:
         x_train = []
         y_train = []
         for i in range(batch_size):
             img, img_name = read_random_image(
-                train_data_dir, rezise_size, train)
+                train_data_dir, resize_size, train)
             x_train.append(img)
             y_train.append(dict_labels[img_name])
         y_train = np_utils.to_categorical(y_train, len(unique_labels))
         x_train = np.array(x_train, dtype="float") / 255.0
-        x_train = x_train.reshape(batch_size, rezise_size, rezise_size, 3)
+        x_train = x_train.reshape(batch_size, resize_size, resize_size, 3)
         yield x_train, y_train
 
 
 if __name__ == "__main__":
     dict_labels, unique_labels = import_labels()
     resize_size = 224
+
     input_tensor = Input(shape=(resize_size, resize_size, 3))
-    vgg_model = VGG16(input_tensor=input_tensor, weights="imagenet", include_top=False)
+    inception_model = InceptionV3(input_tensor=input_tensor, weights="imagenet", include_top=False)
     # base_model.layers.pop()
 
-    # add a global spatial average pooling layer
-    x = vgg_model.output
-    x = Flatten()(x)
+    x = inception_model.output
+    x = GlobalAveragePooling2D()(x)
     # let's add a fully-connected layer
     x = Dense(512, activation='relu')(x)
     # and a logistic layer -- let's say we have 200 classes
     predictions = Dense(len(unique_labels), activation='softmax')(x)
 
     # this is the model we will train
-    model = Model(inputs=vgg_model.input, outputs=predictions)
-    for layer in model.layers[:19]:
+    model = Model(inputs=inception_model.input, outputs=predictions)
+
+    # first: train only the top layers (which were randomly initialized)
+    # i.e. freeze all convolutional InceptionV3 layers
+    for layer in inception_model.layers:
         layer.trainable = False
+
     model.summary()
-    model.compile(optimizer='adam', loss='categorical_crossentropy',
+    model.compile(optimizer='rmsprop', loss='categorical_crossentropy',
                   metrics=['accuracy'])
     model.fit_generator(data_generator(batch_size, dict_labels, unique_labels, resize_size, True),
                         samples_per_epoch=250, nb_epoch=epochs,
