@@ -6,7 +6,7 @@ import random
 
 from keras.utils import np_utils
 from keras.models import Model
-from keras.layers import Dense, GlobalAveragePooling2D
+from keras.layers import Dense, GlobalAveragePooling2D, Dropout
 from keras.optimizers import Adam, SGD
 from keras.applications.vgg16 import VGG16
 from keras.applications.inception_v3 import InceptionV3
@@ -38,7 +38,7 @@ def read_random_image(image_path, resize_size, train):
         img_name = random_sample['id'].iloc[0]
         img = cv2.imread(
             image_path + "/" + img_name + ".jpg")
-        crop_chance = random.random()
+        '''crop_chance = random.random()
         blur_chance = random.random()
         rotate_zoom_chance = random.random()
         flip_chance = random.random()
@@ -49,7 +49,7 @@ def read_random_image(image_path, resize_size, train):
         if rotate_zoom_chance <= 1:
             img = random_rotate_zoom(img)
         if flip_chance <= 1:
-            img = vertical_flip(img)
+            img = vertical_flip(img)'''
     else:
         random_sample = df_test.sample(n=1)
         img_name = random_sample['id'].iloc[0]
@@ -98,7 +98,8 @@ if __name__ == "__main__":
     x = inception_model.output
     x = GlobalAveragePooling2D()(x)
     # let's add a fully-connected layer
-    x = Dense(512, activation='relu')(x)
+    x = Dense(256, activation='relu')(x)
+    x = Dropout(0.4)(x)
     # and a logistic layer -- let's say we have 200 classes
     predictions = Dense(len(unique_labels), activation='softmax')(x)
 
@@ -111,7 +112,7 @@ if __name__ == "__main__":
         layer.trainable = False
 
     model.summary()
-    model.compile(optimizer='rmsprop', loss='categorical_crossentropy',
+    model.compile(optimizer='adam', loss='categorical_crossentropy',
                   metrics=['accuracy'])
     model.fit_generator(data_generator(batch_size, dict_labels, unique_labels, resize_size, True),
                         samples_per_epoch=250, nb_epoch=epochs,
